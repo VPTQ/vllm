@@ -550,10 +550,12 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                                                      shard_size)
         # Special case for AQLM codebooks.
         elif is_metadata:
-            # metadata indicates fixed size concatenated along dim 0
-            shard_size = loaded_weight.shape[0]
+            # metadata indicates fixed size concatenated along narrow_dim
+            narrow_dim = getattr(param, "slice_dim", 0)
+            shard_size = getattr(param, "shard_sizes", [0,0,0])[loaded_shard_id]
+            shard_size = shard_size or loaded_weight.shape[narrow_dim]
             shard_offset = loaded_shard_id * shard_size
-            param_data = param_data.narrow(0, shard_offset, shard_size)
+            param_data = param_data.narrow(narrow_dim, shard_offset, shard_size)
 
         # Special case for per-tensor scales in fused case.
         elif needs_scalar_to_array:
@@ -940,9 +942,12 @@ class QKVParallelLinear(ColumnParallelLinear):
         # Special case for for AQLM codebooks.
         elif is_metadata:
             # metadata indicates fixed size concatenated along dim 0
-            shard_size = loaded_weight.shape[0]
+            narrow_dim = getattr(param, "slice_dim", 0)
             shard_index = ["q", "k", "v"].index(loaded_shard_id)
-            param_data = param_data.narrow(0, shard_index * shard_size,
+            shard_sizes = getattr(param, "shard_sizes", [loaded_weight.shape[narrow_dim]]*3)
+            shard_size = shard_sizes[shard_index]
+            shard_offset = sum(shard_sizes[:shard_index])
+            param_data = param_data.narrow(narrow_dim, shard_offset,
                                            shard_size)
         # Special case for per-tensor scales in fused case.
         elif needs_scalar_to_array:
