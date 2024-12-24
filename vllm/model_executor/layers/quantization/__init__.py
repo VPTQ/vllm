@@ -58,7 +58,6 @@ def get_quantization_config(quantization: str) -> Type[QuantizationConfig]:
     from .tpu_int8 import Int8TpuConfig
     from .vptq import VPTQConfig
 
-
     method_to_config: Dict[str, Type[QuantizationConfig]] = {
         "aqlm": AQLMConfig,
         "awq": AWQConfig,
