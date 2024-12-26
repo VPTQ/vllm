@@ -35,15 +35,15 @@
 namespace vllm {
 namespace vptq {
 #if defined(USE_ROCM)
-    #define VPTQ_LDG(arg) __ldg(arg)
-    #define SHFL_DOWN(val, offset) __shfl_down(val, offset)
-    #define WARP_SIZE warpSize
+  #define VPTQ_LDG(arg) __ldg(arg)
+  #define SHFL_DOWN(val, offset) __shfl_down(val, offset)
+  #define WARP_SIZE warpSize
 typedef __hip_bfloat162 __bfloat162;
 typedef __hip_bfloat16 __bfloat16;
 #else
-    #define WARP_SIZE 32
-    #define VPTQ_LDG(arg) *(arg)
-    #define SHFL_DOWN(val, offset) __shfl_down_sync(0xffffffff, val, offset)
+  #define WARP_SIZE 32
+  #define VPTQ_LDG(arg) *(arg)
+  #define SHFL_DOWN(val, offset) __shfl_down_sync(0xffffffff, val, offset)
 typedef __nv_bfloat162 __bfloat162;
 typedef __nv_bfloat16 __bfloat16;
 #endif
@@ -191,15 +191,15 @@ __forceinline__ T ceil_div(T a, T b) {
 template <typename T>
 T __device__ __forceinline__ FMA2(T a, T b, T c) {
   if constexpr (std::is_same<T, __bfloat162>::value) {
-  #if (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800) && !defined(USE_ROCM)
+#if (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800) && !defined(USE_ROCM)
     float x =
         __bfloat162float(a.x) * __bfloat162float(b.x) + __bfloat162float(c.x);
     float y =
         __bfloat162float(a.y) * __bfloat162float(b.y) + __bfloat162float(c.y);
     return __bfloat162{__float2bfloat16(x), __float2bfloat16(y)};
-  #else
+#else
     return __hfma2(a, b, c);
-  #endif
+#endif
   } else if constexpr (std::is_same<T, float2>::value) {
     return float2{a.x * b.x + c.x, a.y * b.y + c.y};
   } else {
@@ -211,12 +211,12 @@ T __device__ __forceinline__ FMA2(T a, T b, T c) {
 template <typename T>
 T __device__ __forceinline__ FMA(T a, T b, T c) {
   if constexpr (std::is_same<T, __bfloat16>::value) {
-  #if (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800) && !defined(USE_ROCM)
+#if (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800) && !defined(USE_ROCM)
     float x = __bfloat162float(a) * __bfloat162float(b) + __bfloat162float(c);
     return __bfloat16{__float2bfloat16(x)};
-  #else
+#else
     return __hfma(a, b, c);
-  #endif
+#endif
   } else if constexpr (std::is_same<T, float>::value) {
     return float{a.x * b.x + c.x};
   } else {
@@ -228,13 +228,13 @@ T __device__ __forceinline__ FMA(T a, T b, T c) {
 template <typename T>
 T __device__ __forceinline__ ADD2(T a, T b) {
   if constexpr (std::is_same<T, __bfloat162>::value) {
-  #if (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800) || defined(USE_ROCM)
+#if (defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800) || defined(USE_ROCM)
     float x = __bfloat162float(a.x) + __bfloat162float(b.x);
     float y = __bfloat162float(a.y) + __bfloat162float(b.y);
     return __bfloat162{__float2bfloat16(x), __float2bfloat16(y)};
-  #else
+#else
     return __hadd2(a, b);
-  #endif
+#endif
   } else if constexpr (std::is_same<T, float2>::value) {
     return float2{a.x + b.x, a.y + b.y};
   } else {
@@ -246,11 +246,11 @@ T __device__ __forceinline__ ADD2(T a, T b) {
 template <typename T>
 T __device__ __forceinline__ ZERO_VALUE(T a) {
   if constexpr (std::is_same<T, __bfloat16>::value) {
-  #if defined(USE_ROCM)
+#if defined(USE_ROCM)
     return __float2bfloat16(0.0f);
-  #else
+#else
     return __float2bfloat16_rn(0.0f);
-  #endif
+#endif
   } else if constexpr (std::is_same<T, float>::value) {
     return 0.0f;
   } else {
@@ -258,7 +258,7 @@ T __device__ __forceinline__ ZERO_VALUE(T a) {
   }
 }
 
-  #if defined(USE_ROCM)
+#if defined(USE_ROCM)
 __device__ __half operator+(const __half& a, const __half& b) {
   return __hadd(a,
                 b);  // Use HIP's intrinsic __hadd for half-precision addition
@@ -270,7 +270,7 @@ __device__ __half operator*(const __half& a, const __half& b) {
       a, b);  // Use HIP's intrinsic __hmul for half-precision multiplication
 }
 
-  #endif
+#endif
 
 template <typename T>
 struct C10ToNvType {
@@ -311,7 +311,7 @@ __global__ void WqA16WithOutliers_PackIndice(
   __shared__ float shared_output[GROUPSIZE][cuda::kBlockSize / WARP_SIZE + 1];
   scalar_t tmp_output[GROUPSIZE];
   const scalar_t zero_value = ZERO_VALUE(scalar_t());
-  #pragma unroll
+#pragma unroll
   for (int i = 0; i < GROUPSIZE; i++) {
     tmp_output[i] = zero_value;
   }
@@ -340,7 +340,7 @@ __global__ void WqA16WithOutliers_PackIndice(
       // outliers
       constexpr int n_outlisers_groups_in_normalgroup =
           GROUPSIZE / OL_GroupSize;
-  #pragma unroll
+#pragma unroll
       for (int i = 0; i < n_outlisers_groups_in_normalgroup; i++) {
         if (in_y * n_outlisers_groups_in_normalgroup + i >=
             out_features / OL_GroupSize)
@@ -404,7 +404,7 @@ __global__ void WqA16WithOutliers_PackIndice(
 
         VecType hres[GROUPSIZE / 2];
         hres_ptr = hres;
-  #pragma unroll
+#pragma unroll
         for (int i = 0; i < GROUPSIZE / 2; i++) {
           hres[i] = ADD2(*(((VecType*)base) + i), *(((VecType*)residual) + i));
           // hres[i] = FMA2(hres[i], scale2, bias2);
@@ -419,7 +419,7 @@ __global__ void WqA16WithOutliers_PackIndice(
       //   tmp_output[gi] += bias;
       // }
       VecType* h2_tmp_output = (VecType*)tmp_output;
-  #pragma unroll
+#pragma unroll
       for (int gi = 0; gi < GROUPSIZE / 2; gi++) {
         h2_tmp_output[gi] = FMA2(hres_ptr[gi], input_v2, h2_tmp_output[gi]);
         h2_tmp_output[gi] = ADD2(h2_tmp_output[gi], bias2);
@@ -430,7 +430,7 @@ __global__ void WqA16WithOutliers_PackIndice(
   // warp_size = WARP_SIZE
   int warpid = threadIdx.x / WARP_SIZE;  // at most 8 warp= 256/WARP_SIZE
   int landid = threadIdx.x % WARP_SIZE;
-  #pragma unroll
+#pragma unroll
   for (int gi = 0; gi < GROUPSIZE; gi++) {
     float reduce_out = 0.f;
     reduce_out = cuda::ConvertToFloat(tmp_output[gi]);
@@ -450,7 +450,7 @@ __global__ void WqA16WithOutliers_PackIndice(
 
   __syncthreads();
   if (landid < cuda::kBlockSize / WARP_SIZE) {
-  #pragma unroll
+#pragma unroll
     for (int wid = warpid; wid < GROUPSIZE;
          wid += cuda::kBlockSize / WARP_SIZE) {
       float reduce_out = shared_output[wid][landid];
@@ -495,7 +495,7 @@ __global__ void DequantizeWithOutliers_PackIndice(
     q_indice_outliers +=
         in_y * n_outlisers_groups_in_normalgroup * outliers_infeatures +
         mapped_index_x;
-  #pragma unroll(3)
+#pragma unroll(3)
     for (int i = 0; i < n_outlisers_groups_in_normalgroup; i++) {
       if (in_y * n_outlisers_groups_in_normalgroup + i >=
           out_features / OL_GroupSize)
@@ -506,7 +506,7 @@ __global__ void DequantizeWithOutliers_PackIndice(
       const scalar_t* outliers_centroids_start =
           outliers_centroids + outliers_ind * OL_GroupSize;
       const int gi = in_y * GROUPSIZE + i * OL_GroupSize;
-  #pragma unroll(4)
+#pragma unroll(4)
       for (int j = 0; j < OL_GroupSize; j++) {
         if ((gi + j) >= out_features) {
           return;
@@ -548,7 +548,7 @@ __global__ void DequantizeWithOutliers_PackIndice(
         residual_centroids + res_ind * GROUPSIZE;
     cuda::ldg_vec_x<GROUPSIZE>((residual),
                                (const uint32_t*)(residual_centroids_start));
-  #pragma unroll
+#pragma unroll
     for (int i = 0; i < GROUPSIZE / 2; i++) {
       base[i] = ADD2(*(((VecType*)base) + i), *(((VecType*)residual) + i));
     }
@@ -557,7 +557,7 @@ __global__ void DequantizeWithOutliers_PackIndice(
   VecType hres[GROUPSIZE / 2];
   VecType scale2 = VecType{scale, scale};
   VecType bias2 = VecType{bias, bias};
-  #pragma unroll
+#pragma unroll
   for (int i = 0; i < GROUPSIZE / 2; i++) {
     hres[i] = FMA2(base[i], scale2, bias2);
   }
@@ -568,7 +568,7 @@ __global__ void DequantizeWithOutliers_PackIndice(
   } else {
     out += (group_step)*in_features + in_x;
   }
-  #pragma unroll
+#pragma unroll
   for (int i = 0; i < GROUPSIZE; i++) {
     if ((group_step + i) < out_features) {
       if constexpr (Return_OUF_x_INF) {
@@ -631,140 +631,132 @@ torch::Tensor lauch_deqantize_outliers_cuda_packkernel(
           ? outliers_indices.value().data_ptr<int16_t>()
           : nullptr;
   auto stream = at::cuda::getCurrentCUDAStream().stream();
-  #define callDequantWithOutliers(scalar_t, IDXBITS, BASEGROUP, OUT_OUF_INF, \
-                                  ResidualBits)                              \
-    {                                                                        \
-      using nv_type = typename C10ToNvType<scalar_t>::type;                  \
-      DequantizeWithOutliers_PackIndice<nv_type, IDXBITS, ResidualBits,      \
-                                        BASEGROUP, OUT_OUF_INF>              \
-          <<<blocks, threads, 0, stream>>>(                                  \
-              reinterpret_cast<nv_type*>(output.data_ptr<scalar_t>()),       \
-              q_indice.data_ptr<int32_t>(), outliers_indices_ptr,            \
-              reinterpret_cast<const nv_type*>(                              \
-                  centroids.data_ptr<scalar_t>()),                           \
-              residual_centroids.has_value()                                 \
-                  ? reinterpret_cast<const nv_type*>(                        \
-                        residual_centroids.value().data_ptr<scalar_t>())     \
-                  : nullptr,                                                 \
-              outliers_centroids.has_value()                                 \
-                  ? reinterpret_cast<const nv_type*>(                        \
-                        outliers_centroids.value().data_ptr<scalar_t>())     \
-                  : nullptr,                                                 \
-              perm_ptr,                                                      \
-              reinterpret_cast<const nv_type*>(                              \
-                  weight_scale.data_ptr<scalar_t>()),                        \
-              reinterpret_cast<const nv_type*>(                              \
-                  weight_bias.data_ptr<scalar_t>()),                         \
-              out_size[0], out_size[1], outliers_indices_size_n1,            \
-              outliers_centroids_size_n1, q_indice.stride(0),                \
-              q_indice.stride(1), centroids.stride(0), q_indice.size(0));    \
-    }
+#define callDequantWithOutliers(scalar_t, IDXBITS, BASEGROUP, OUT_OUF_INF,    \
+                                ResidualBits)                                 \
+  {                                                                           \
+    using nv_type = typename C10ToNvType<scalar_t>::type;                     \
+    DequantizeWithOutliers_PackIndice<nv_type, IDXBITS, ResidualBits,         \
+                                      BASEGROUP, OUT_OUF_INF>                 \
+        <<<blocks, threads, 0, stream>>>(                                     \
+            reinterpret_cast<nv_type*>(output.data_ptr<scalar_t>()),          \
+            q_indice.data_ptr<int32_t>(), outliers_indices_ptr,               \
+            reinterpret_cast<const nv_type*>(centroids.data_ptr<scalar_t>()), \
+            residual_centroids.has_value()                                    \
+                ? reinterpret_cast<const nv_type*>(                           \
+                      residual_centroids.value().data_ptr<scalar_t>())        \
+                : nullptr,                                                    \
+            outliers_centroids.has_value()                                    \
+                ? reinterpret_cast<const nv_type*>(                           \
+                      outliers_centroids.value().data_ptr<scalar_t>())        \
+                : nullptr,                                                    \
+            perm_ptr,                                                         \
+            reinterpret_cast<const nv_type*>(                                 \
+                weight_scale.data_ptr<scalar_t>()),                           \
+            reinterpret_cast<const nv_type*>(                                 \
+                weight_bias.data_ptr<scalar_t>()),                            \
+            out_size[0], out_size[1], outliers_indices_size_n1,               \
+            outliers_centroids_size_n1, q_indice.stride(0),                   \
+            q_indice.stride(1), centroids.stride(0), q_indice.size(0));       \
+  }
 
-  #define callDequantWithOutliers_dtype(IDXBITS, BASEGROUP, OUT_OUF_INF, \
-                                        ResidualBits)                    \
-    if (centroids.dtype() == at::ScalarType::Half) {                     \
-      using scalar_t = c10::Half;                                        \
-      callDequantWithOutliers(scalar_t, IDXBITS, BASEGROUP, OUT_OUF_INF, \
-                              ResidualBits);                             \
-    } else {                                                             \
-      using scalar_t = c10::BFloat16;                                    \
-      callDequantWithOutliers(scalar_t, IDXBITS, BASEGROUP, OUT_OUF_INF, \
-                              ResidualBits);                             \
-    }
+#define callDequantWithOutliers_dtype(IDXBITS, BASEGROUP, OUT_OUF_INF, \
+                                      ResidualBits)                    \
+  if (centroids.dtype() == at::ScalarType::Half) {                     \
+    using scalar_t = c10::Half;                                        \
+    callDequantWithOutliers(scalar_t, IDXBITS, BASEGROUP, OUT_OUF_INF, \
+                            ResidualBits);                             \
+  } else {                                                             \
+    using scalar_t = c10::BFloat16;                                    \
+    callDequantWithOutliers(scalar_t, IDXBITS, BASEGROUP, OUT_OUF_INF, \
+                            ResidualBits);                             \
+  }
 
-  #define callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, ResidualBits)  \
-    switch (index_bits) {                                                     \
-      case 16:                                                                \
-        callDequantWithOutliers_dtype(16, BASEGROUP, OUT_OUF_INF,             \
-                                      ResidualBits);                          \
-        break;                                                                \
-      case 15:                                                                \
-        callDequantWithOutliers_dtype(15, BASEGROUP, OUT_OUF_INF,             \
-                                      ResidualBits);                          \
-        break;                                                                \
-      case 14:                                                                \
-        callDequantWithOutliers_dtype(14, BASEGROUP, OUT_OUF_INF,             \
-                                      ResidualBits);                          \
-        break;                                                                \
-      case 13:                                                                \
-        callDequantWithOutliers_dtype(13, BASEGROUP, OUT_OUF_INF,             \
-                                      ResidualBits);                          \
-        break;                                                                \
-      case 12:                                                                \
-        callDequantWithOutliers_dtype(12, BASEGROUP, OUT_OUF_INF,             \
-                                      ResidualBits);                          \
-        break;                                                                \
-      case 8:                                                                 \
-        callDequantWithOutliers_dtype(8, BASEGROUP, OUT_OUF_INF,              \
-                                      ResidualBits);                          \
-        break;                                                                \
-      case 4:                                                                 \
-        callDequantWithOutliers_dtype(4, BASEGROUP, OUT_OUF_INF,              \
-                                      ResidualBits);                          \
-        break;                                                                \
-      default:                                                                \
-        TORCH_CHECK(false,                                                    \
-                    "un-supported index_bits:" + std::to_string(index_bits)); \
-    }
-  #define CASE_callDequantWithOutliers_bits(rib)                 \
-    case rib: {                                                  \
-      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, rib); \
-      break;                                                     \
-    }
-  #define DispatchDequantWithOutliers(BASEGROUP, OUT_OUF_INF)     \
-    switch (res_index_bits) {                                     \
-      case 16:                                                    \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 16); \
-        break;                                                    \
-      case 15:                                                    \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 15); \
-        break;                                                    \
-      case 12:                                                    \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 12); \
-        break;                                                    \
-      case 11:                                                    \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 11); \
-        break;                                                    \
-      case 10:                                                    \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 10); \
-        break;                                                    \
-      case 9:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 9);  \
-        break;                                                    \
-      case 8:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 8);  \
-        break;                                                    \
-      case 7:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 7);  \
-        break;                                                    \
-      case 6:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 6);  \
-        break;                                                    \
-      case 5:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 5);  \
-        break;                                                    \
-      case 4:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 4);  \
-        break;                                                    \
-      case 3:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 3);  \
-        break;                                                    \
-      case 2:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 2);  \
-        break;                                                    \
-      case 0:                                                     \
-        callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 0);  \
-        break;                                                    \
-      default:                                                    \
-        TORCH_CHECK(false, "un-supported res_index_bits:" +       \
-                               std::to_string(res_index_bits));   \
-    }
+#define callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, ResidualBits)     \
+  switch (index_bits) {                                                        \
+    case 16:                                                                   \
+      callDequantWithOutliers_dtype(16, BASEGROUP, OUT_OUF_INF, ResidualBits); \
+      break;                                                                   \
+    case 15:                                                                   \
+      callDequantWithOutliers_dtype(15, BASEGROUP, OUT_OUF_INF, ResidualBits); \
+      break;                                                                   \
+    case 14:                                                                   \
+      callDequantWithOutliers_dtype(14, BASEGROUP, OUT_OUF_INF, ResidualBits); \
+      break;                                                                   \
+    case 13:                                                                   \
+      callDequantWithOutliers_dtype(13, BASEGROUP, OUT_OUF_INF, ResidualBits); \
+      break;                                                                   \
+    case 12:                                                                   \
+      callDequantWithOutliers_dtype(12, BASEGROUP, OUT_OUF_INF, ResidualBits); \
+      break;                                                                   \
+    case 8:                                                                    \
+      callDequantWithOutliers_dtype(8, BASEGROUP, OUT_OUF_INF, ResidualBits);  \
+      break;                                                                   \
+    case 4:                                                                    \
+      callDequantWithOutliers_dtype(4, BASEGROUP, OUT_OUF_INF, ResidualBits);  \
+      break;                                                                   \
+    default:                                                                   \
+      TORCH_CHECK(false,                                                       \
+                  "un-supported index_bits:" + std::to_string(index_bits));    \
+  }
+#define CASE_callDequantWithOutliers_bits(rib)                 \
+  case rib: {                                                  \
+    callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, rib); \
+    break;                                                     \
+  }
+#define DispatchDequantWithOutliers(BASEGROUP, OUT_OUF_INF)     \
+  switch (res_index_bits) {                                     \
+    case 16:                                                    \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 16); \
+      break;                                                    \
+    case 15:                                                    \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 15); \
+      break;                                                    \
+    case 12:                                                    \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 12); \
+      break;                                                    \
+    case 11:                                                    \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 11); \
+      break;                                                    \
+    case 10:                                                    \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 10); \
+      break;                                                    \
+    case 9:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 9);  \
+      break;                                                    \
+    case 8:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 8);  \
+      break;                                                    \
+    case 7:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 7);  \
+      break;                                                    \
+    case 6:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 6);  \
+      break;                                                    \
+    case 5:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 5);  \
+      break;                                                    \
+    case 4:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 4);  \
+      break;                                                    \
+    case 3:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 3);  \
+      break;                                                    \
+    case 2:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 2);  \
+      break;                                                    \
+    case 0:                                                     \
+      callDequantWithOutliers_bits(BASEGROUP, OUT_OUF_INF, 0);  \
+      break;                                                    \
+    default:                                                    \
+      TORCH_CHECK(false, "un-supported res_index_bits:" +       \
+                             std::to_string(res_index_bits));   \
+  }
 
-  #define CASE_DispatchDequantWithOutliers(bgsize)      \
-    case bgsize: {                                      \
-      DispatchDequantWithOutliers(bgsize, out_ouf_inf); \
-      break;                                            \
-    }
+#define CASE_DispatchDequantWithOutliers(bgsize)      \
+  case bgsize: {                                      \
+    DispatchDequantWithOutliers(bgsize, out_ouf_inf); \
+    break;                                            \
+  }
   switch (base_groupsize) {
     CASE_DispatchDequantWithOutliers(16);
     CASE_DispatchDequantWithOutliers(12);
@@ -776,7 +768,7 @@ torch::Tensor lauch_deqantize_outliers_cuda_packkernel(
       TORCH_CHECK(false, "un-supported base_groupsize:" +
                              std::to_string(base_groupsize));
   }
-  #undef CASE_DispatchDequantWithOutliers
+#undef CASE_DispatchDequantWithOutliers
   if (out_ouf_inf) {
     return output;
   } else {
@@ -834,132 +826,126 @@ torch::Tensor lauch_gemv_outliers_cuda_packkernel(
   const uint16_t* perm_ptr =
       perm.has_value() ? (const uint16_t*)(perm.value().data_ptr<int16_t>())
                        : nullptr;
-  #define CallWqA16kernel(scalar_t, out_buf, IDXBITS, BASEGROUP, Do_Reduce,   \
-                          ResidualBits)                                       \
-    {                                                                         \
-      using nv_type = typename C10ToNvType<scalar_t>::type;                   \
-      WqA16WithOutliers_PackIndice<nv_type, IDXBITS, ResidualBits, BASEGROUP, \
-                                   4, Do_Reduce>                              \
-          <<<blocks, threads, shared_memory_size, stream>>>(                  \
-              reinterpret_cast<nv_type*>(out_buf.data_ptr<scalar_t>()),       \
-              reinterpret_cast<const nv_type*>(input.data_ptr<scalar_t>()),   \
-              q_indice.data_ptr<int32_t>(), outliers_indices_ptr,             \
-              reinterpret_cast<const nv_type*>(                               \
-                  centroids.data_ptr<scalar_t>()),                            \
-              residual_centroids.has_value()                                  \
-                  ? reinterpret_cast<const nv_type*>(                         \
-                        residual_centroids.value().data_ptr<scalar_t>())      \
-                  : nullptr,                                                  \
-              outliers_centroids.has_value()                                  \
-                  ? reinterpret_cast<const nv_type*>(                         \
-                        outliers_centroids.value().data_ptr<scalar_t>())      \
-                  : nullptr,                                                  \
-              perm_ptr,                                                       \
-              reinterpret_cast<const nv_type*>(                               \
-                  weight_scale.data_ptr<scalar_t>()),                         \
-              reinterpret_cast<const nv_type*>(                               \
-                  weight_bias.data_ptr<scalar_t>()),                          \
-              bias.has_value() ? reinterpret_cast<const nv_type*>(            \
-                                     bias.value().data_ptr<scalar_t>())       \
-                               : nullptr,                                     \
-              out_features, in_features, outliers_indices_size_n1,            \
-              q_indice.stride(0), q_indice.stride(1), centroids.stride(0),    \
-              q_indice.size(0));                                              \
-    }
+#define CallWqA16kernel(scalar_t, out_buf, IDXBITS, BASEGROUP, Do_Reduce,      \
+                        ResidualBits)                                          \
+  {                                                                            \
+    using nv_type = typename C10ToNvType<scalar_t>::type;                      \
+    WqA16WithOutliers_PackIndice<nv_type, IDXBITS, ResidualBits, BASEGROUP, 4, \
+                                 Do_Reduce>                                    \
+        <<<blocks, threads, shared_memory_size, stream>>>(                     \
+            reinterpret_cast<nv_type*>(out_buf.data_ptr<scalar_t>()),          \
+            reinterpret_cast<const nv_type*>(input.data_ptr<scalar_t>()),      \
+            q_indice.data_ptr<int32_t>(), outliers_indices_ptr,                \
+            reinterpret_cast<const nv_type*>(centroids.data_ptr<scalar_t>()),  \
+            residual_centroids.has_value()                                     \
+                ? reinterpret_cast<const nv_type*>(                            \
+                      residual_centroids.value().data_ptr<scalar_t>())         \
+                : nullptr,                                                     \
+            outliers_centroids.has_value()                                     \
+                ? reinterpret_cast<const nv_type*>(                            \
+                      outliers_centroids.value().data_ptr<scalar_t>())         \
+                : nullptr,                                                     \
+            perm_ptr,                                                          \
+            reinterpret_cast<const nv_type*>(                                  \
+                weight_scale.data_ptr<scalar_t>()),                            \
+            reinterpret_cast<const nv_type*>(                                  \
+                weight_bias.data_ptr<scalar_t>()),                             \
+            bias.has_value() ? reinterpret_cast<const nv_type*>(               \
+                                   bias.value().data_ptr<scalar_t>())          \
+                             : nullptr,                                        \
+            out_features, in_features, outliers_indices_size_n1,               \
+            q_indice.stride(0), q_indice.stride(1), centroids.stride(0),       \
+            q_indice.size(0));                                                 \
+  }
 
-  #define CallWqA16kernel_dtype(out_buf, IDXBITS, BASEGROUP, Do_Reduce, \
-                                ResidualBits)                           \
-    if (input.dtype() == at::ScalarType::Half) {                        \
-      using scalar_t = c10::Half;                                       \
-      CallWqA16kernel(scalar_t, out_buf, IDXBITS, BASEGROUP, Do_Reduce, \
-                      ResidualBits);                                    \
-    } else {                                                            \
-      using scalar_t = c10::BFloat16;                                   \
-      CallWqA16kernel(scalar_t, out_buf, IDXBITS, BASEGROUP, Do_Reduce, \
-                      ResidualBits);                                    \
-    }
+#define CallWqA16kernel_dtype(out_buf, IDXBITS, BASEGROUP, Do_Reduce, \
+                              ResidualBits)                           \
+  if (input.dtype() == at::ScalarType::Half) {                        \
+    using scalar_t = c10::Half;                                       \
+    CallWqA16kernel(scalar_t, out_buf, IDXBITS, BASEGROUP, Do_Reduce, \
+                    ResidualBits);                                    \
+  } else {                                                            \
+    using scalar_t = c10::BFloat16;                                   \
+    CallWqA16kernel(scalar_t, out_buf, IDXBITS, BASEGROUP, Do_Reduce, \
+                    ResidualBits);                                    \
+  }
 
-  #define CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, ResidualBits)    \
-    switch (index_bits) {                                                      \
-      case 16:                                                                 \
-        CallWqA16kernel_dtype(out_buf, 16, BASEGROUP, Do_Reduce,               \
-                              ResidualBits);                                   \
-        break;                                                                 \
-      case 15:                                                                 \
-        CallWqA16kernel_dtype(out_buf, 15, BASEGROUP, Do_Reduce,               \
-                              ResidualBits);                                   \
-        break;                                                                 \
-      case 14:                                                                 \
-        CallWqA16kernel_dtype(out_buf, 14, BASEGROUP, Do_Reduce,               \
-                              ResidualBits);                                   \
-        break;                                                                 \
-      case 13:                                                                 \
-        CallWqA16kernel_dtype(out_buf, 13, BASEGROUP, Do_Reduce,               \
-                              ResidualBits);                                   \
-        break;                                                                 \
-      case 12:                                                                 \
-        CallWqA16kernel_dtype(out_buf, 12, BASEGROUP, Do_Reduce,               \
-                              ResidualBits);                                   \
-        break;                                                                 \
-      case 8:                                                                  \
-        CallWqA16kernel_dtype(out_buf, 8, BASEGROUP, Do_Reduce, ResidualBits); \
-        break;                                                                 \
-      case 4:                                                                  \
-        CallWqA16kernel_dtype(out_buf, 4, BASEGROUP, Do_Reduce, ResidualBits); \
-        break;                                                                 \
-      default:                                                                 \
-        TORCH_CHECK(false,                                                     \
-                    "un-supported index_bits:" + std::to_string(index_bits));  \
-    }
+#define CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, ResidualBits)     \
+  switch (index_bits) {                                                       \
+    case 16:                                                                  \
+      CallWqA16kernel_dtype(out_buf, 16, BASEGROUP, Do_Reduce, ResidualBits); \
+      break;                                                                  \
+    case 15:                                                                  \
+      CallWqA16kernel_dtype(out_buf, 15, BASEGROUP, Do_Reduce, ResidualBits); \
+      break;                                                                  \
+    case 14:                                                                  \
+      CallWqA16kernel_dtype(out_buf, 14, BASEGROUP, Do_Reduce, ResidualBits); \
+      break;                                                                  \
+    case 13:                                                                  \
+      CallWqA16kernel_dtype(out_buf, 13, BASEGROUP, Do_Reduce, ResidualBits); \
+      break;                                                                  \
+    case 12:                                                                  \
+      CallWqA16kernel_dtype(out_buf, 12, BASEGROUP, Do_Reduce, ResidualBits); \
+      break;                                                                  \
+    case 8:                                                                   \
+      CallWqA16kernel_dtype(out_buf, 8, BASEGROUP, Do_Reduce, ResidualBits);  \
+      break;                                                                  \
+    case 4:                                                                   \
+      CallWqA16kernel_dtype(out_buf, 4, BASEGROUP, Do_Reduce, ResidualBits);  \
+      break;                                                                  \
+    default:                                                                  \
+      TORCH_CHECK(false,                                                      \
+                  "un-supported index_bits:" + std::to_string(index_bits));   \
+  }
 
-  #define DispatchWqA16Kernel(out_buf, BASEGROUP, Do_Reduce)     \
-    switch (res_index_bits) {                                    \
-      case 16:                                                   \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 16); \
-        break;                                                   \
-      case 15:                                                   \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 15); \
-        break;                                                   \
-      case 12:                                                   \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 12); \
-        break;                                                   \
-      case 11:                                                   \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 11); \
-        break;                                                   \
-      case 10:                                                   \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 10); \
-        break;                                                   \
-      case 9:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 9);  \
-        break;                                                   \
-      case 8:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 8);  \
-        break;                                                   \
-      case 7:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 7);  \
-        break;                                                   \
-      case 6:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 6);  \
-        break;                                                   \
-      case 5:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 5);  \
-        break;                                                   \
-      case 4:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 4);  \
-        break;                                                   \
-      case 3:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 3);  \
-        break;                                                   \
-      case 2:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 2);  \
-        break;                                                   \
-      case 0:                                                    \
-        CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 0);  \
-        break;                                                   \
-      default:                                                   \
-        TORCH_CHECK(false, "un-supported res_index_bits:" +      \
-                               std::to_string(res_index_bits));  \
-    }
+#define DispatchWqA16Kernel(out_buf, BASEGROUP, Do_Reduce)     \
+  switch (res_index_bits) {                                    \
+    case 16:                                                   \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 16); \
+      break;                                                   \
+    case 15:                                                   \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 15); \
+      break;                                                   \
+    case 12:                                                   \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 12); \
+      break;                                                   \
+    case 11:                                                   \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 11); \
+      break;                                                   \
+    case 10:                                                   \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 10); \
+      break;                                                   \
+    case 9:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 9);  \
+      break;                                                   \
+    case 8:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 8);  \
+      break;                                                   \
+    case 7:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 7);  \
+      break;                                                   \
+    case 6:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 6);  \
+      break;                                                   \
+    case 5:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 5);  \
+      break;                                                   \
+    case 4:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 4);  \
+      break;                                                   \
+    case 3:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 3);  \
+      break;                                                   \
+    case 2:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 2);  \
+      break;                                                   \
+    case 0:                                                    \
+      CallWqA16kernel_bits(out_buf, BASEGROUP, Do_Reduce, 0);  \
+      break;                                                   \
+    default:                                                   \
+      TORCH_CHECK(false, "un-supported res_index_bits:" +      \
+                             std::to_string(res_index_bits));  \
+  }
 
   if (in_features <= cuda::kBlockSize) {
     // output = at::empty(output_shape, centroids.options());

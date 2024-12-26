@@ -91,7 +91,7 @@ def dequantize_weight(
         [*dims, num_in_groups*group_size]
     """
     output_size = metadata.output_size
-    num_codebooks = metadata.num_codebooks
+    num_codebooks = indices.shape[0]
     num_centroids = metadata.num_centroids
     num_res_centroids = metadata.num_res_centroids
     vector_len = metadata.vector_len
@@ -106,7 +106,7 @@ def dequantize_weight(
     index_res_bits = math.ceil(
         math.log2(num_res_centroids)) if enable_residual else 0
 
-    # print(f'indices shape: {indices.shape}')
+    # print(f"indices shape: {indices.shape}")
     indices, res_indices = unpack_index_tensor(
         pack_tensor=indices,
         index_bits=index_bits,
@@ -141,7 +141,8 @@ def dequantize_weight(
                 -1, num_codebooks * group_size))
 
     padding = -output_size % vector_len
-    qweight = qweight[:-padding, :]
+    if padding > 0:
+        qweight = qweight[:-padding, :]
 
     enable_perm = perm is not None
     if enable_perm:
@@ -237,23 +238,22 @@ def generic_dequantize_gemm(
     # multiply at the end.
     indice_sizes = getattr(indices, "shard_sizes", [])
     codebook_sizes = getattr(codebooks, "codebook_sizes", [])
-    rescodebook_sizes = getattr(res_codebooks, "codebook_sizes", [])
+    num_codebooks = indices.shape[0]
 
     input_size = input.shape[-1]
     input_offset = 0
     indice_offset = 0
     output_offset = 0
     codebooks_offset = 0
-    rescodebooks_offset = 0
 
-    for rescodebook_size, codebook_size, output_size, indice_size in zip(
-            rescodebook_sizes, codebook_sizes, output_partition_sizes,
-            indice_sizes):
+    for codebook_size, output_size, indice_size in zip(codebook_sizes,
+                                                       output_partition_sizes,
+                                                       indice_sizes):
         metadata.output_size = output_size
-        shard_output = optimized_dequantize_gemm(
+        shard_output = dequantize_gemm(
             input, indices.narrow(1, indice_offset, indice_size),
-            codebooks.narrow(1, codebooks_offset, codebook_size),
-            res_codebooks.narrow(1, rescodebooks_offset, rescodebook_size),
+            codebooks.narrow(0, codebooks_offset, num_codebooks),
+            res_codebooks.narrow(0, codebooks_offset, num_codebooks),
             weight_scale.narrow(0, input_offset, input_size),
             weight_bias.narrow(0, input_offset, input_size),
             perm.narrow(0, input_offset,
@@ -265,8 +265,7 @@ def generic_dequantize_gemm(
         output_slice.copy_(shard_output)
         output_offset += output_size
         indice_offset += indice_size
-        codebooks_offset += codebook_size
-        rescodebooks_offset += rescodebook_size
+        codebooks_offset += num_codebooks
         input_offset += input_size
     return output
 
@@ -309,10 +308,10 @@ class VPTQConfig(QuantizationConfig):
     def from_config(cls, config: Dict[str, Any]) -> "VPTQConfig":
         config_for_layers: Dict[str, Any] = {}
         shared_layer_config: Dict[str, Any] = {}
-        if 'config_for_layers' in config:
+        if "config_for_layers" in config:
             config_for_layers = cls.get_from_keys(config,
                                                   ["config_for_layers"])
-        if 'shared_layer_config' in config:
+        if "shared_layer_config" in config:
             shared_layer_config = cls.get_from_keys(config,
                                                     ["shared_layer_config"])
         assert len(config_for_layers) > 0 or len(shared_layer_config) > 0, \
@@ -324,17 +323,17 @@ class VPTQConfig(QuantizationConfig):
     def get_quant_method(self, layer: torch.nn.Module,
                          prefix: str) -> Optional["VPTQLinearMethod"]:
         if isinstance(layer, LinearBase):
-            linear_name = prefix.split('.')[-1]
+            linear_name = prefix.split(".")[-1]
             if linear_name == "qkv_proj":
                 quant_config = {
-                    "q_proj": self.shared_layer_config['q_proj'],
-                    "k_proj": self.shared_layer_config['k_proj'],
-                    "v_proj": self.shared_layer_config['v_proj']
+                    "q_proj": self.shared_layer_config["q_proj"],
+                    "k_proj": self.shared_layer_config["k_proj"],
+                    "v_proj": self.shared_layer_config["v_proj"]
                 }
             elif linear_name == "gate_up_proj":
                 quant_config = {
-                    "gate_proj": self.shared_layer_config['gate_proj'],
-                    "up_proj": self.shared_layer_config['up_proj']
+                    "gate_proj": self.shared_layer_config["gate_proj"],
+                    "up_proj": self.shared_layer_config["up_proj"]
                 }
             else:
                 quant_config = self.shared_layer_config[linear_name]
@@ -359,24 +358,22 @@ class VPTQLinearMethod(LinearMethodBase):
                        **extra_weight_attrs):
         # del output_size  # Unused.
         # del input_size  # Unused.
-        extra_weight_attrs['is_metadata'] = True
         if params_dtype != torch.half and params_dtype != torch.bfloat16:
             raise ValueError(
                 "Only half and bfloat16 are currently supported by vptq")
-        quant_config = self.quant_config.get('q_proj', self.quant_config)
-        quant_config = quant_config.get('gate_proj', quant_config)
+        quant_config = self.quant_config.get("q_proj", self.quant_config)
+        quant_config = quant_config.get("gate_proj", quant_config)
 
-        num_codebooks = quant_config['group_num']
-        num_centroids = quant_config['num_centroids'][1]
-        group_size = quant_config['group_size']
-        vector_len = quant_config['vector_lens'][1]
-        num_res_centroids = quant_config['num_res_centroids'][1]
+        num_codebooks = quant_config["group_num"]
+        num_centroids = quant_config["num_centroids"][1]
+        group_size = quant_config["group_size"]
+        vector_len = quant_config["vector_lens"][1]
+        num_res_centroids = quant_config["num_res_centroids"][1]
         enable_residual = num_res_centroids > 0
-        enable_norm = quant_config['enable_norm']
-        enable_perm = quant_config['enable_perm']
+        enable_norm = quant_config["enable_norm"]
+        enable_perm = quant_config["enable_perm"]
 
         metadata = MetaData()
-        metadata.num_codebooks = num_codebooks
         metadata.num_centroids = num_centroids
         metadata.num_res_centroids = num_res_centroids
         metadata.vector_len = vector_len
@@ -385,7 +382,10 @@ class VPTQLinearMethod(LinearMethodBase):
 
         num_linears = len(output_partition_sizes)
 
+        extra_weight_attrs_input_dim = {"input_dim": 0}
+        extra_weight_attrs["is_input_size"] = True
         if enable_norm:
+            extra_weight_attrs["output_dim"] = 0
             weight_scale = Parameter(torch.empty(input_size_per_partition *
                                                  num_linears,
                                                  dtype=params_dtype),
@@ -394,35 +394,24 @@ class VPTQLinearMethod(LinearMethodBase):
                                                 num_linears,
                                                 dtype=params_dtype),
                                     requires_grad=False)
+            set_weight_attrs(weight_scale, extra_weight_attrs_input_dim)
             set_weight_attrs(weight_scale, extra_weight_attrs)
+            set_weight_attrs(weight_bias, extra_weight_attrs_input_dim)
             set_weight_attrs(weight_bias, extra_weight_attrs)
             layer.register_parameter("weight_scale", weight_scale)
             layer.register_parameter("weight_bias", weight_bias)
 
-        centroids = torch.nn.Embedding(num_codebooks,
-                                       num_centroids * vector_len *
-                                       num_linears,
-                                       dtype=params_dtype)
-        set_weight_attrs(centroids.weight, extra_weight_attrs)
-        set_weight_attrs(
-            centroids.weight,
-            {
-                # metadata indicates fixed size concatenated along dim 0
-                "slice_dim":
-                1,
-                "codebook_sizes":
-                [num_centroids * vector_len for _ in output_partition_sizes],
-            },
-        )
-        layer.centroids = centroids
-        # layer.register_parameter("centroids", centroids)
         if enable_perm:
+            extra_weight_attrs["output_dim"] = 0
             perm = Parameter(torch.empty(input_size_per_partition *
                                          num_linears,
                                          dtype=torch.int16),
                              requires_grad=False)
             set_weight_attrs(perm, extra_weight_attrs)
+            set_weight_attrs(perm, extra_weight_attrs_input_dim)
             layer.register_parameter("perm", perm)
+
+        extra_weight_attrs.pop("is_input_size")
 
         index_bits = int(math.log2(num_centroids))
         res_index_bits = int(
@@ -440,18 +429,35 @@ class VPTQLinearMethod(LinearMethodBase):
             indices,
             {
                 # metadata indicates fixed size concatenated along dim 0
-                "slice_dim": 1,
+                "pack_factor": vector_len,
+                "ceil_or_floor": math.ceil,
                 "output_partition_sizes": output_partition_sizes,
                 "shard_sizes": indice_sizes
             },
         )
+        extra_weight_attrs["output_dim"] = 1
         set_weight_attrs(indices, extra_weight_attrs)
         layer.register_parameter("indices", indices)
 
+        extra_weight_attrs.pop("output_dim")
+        extra_weight_attrs["is_metadata"] = True
+        centroids = torch.nn.Embedding(num_codebooks * num_linears,
+                                       num_centroids * vector_len,
+                                       dtype=params_dtype)
+        set_weight_attrs(centroids.weight, extra_weight_attrs)
+        set_weight_attrs(
+            centroids.weight,
+            {
+                # metadata indicates fixed size concatenated along dim 0
+                "codebook_sizes":
+                [num_centroids * vector_len for _ in output_partition_sizes],
+            },
+        )
+        layer.centroids = centroids
+        # layer.register_parameter("centroids", centroids)
         if enable_residual:
-            res_centroids = torch.nn.Embedding(num_codebooks,
-                                               num_res_centroids * vector_len *
-                                               num_linears,
+            res_centroids = torch.nn.Embedding(num_codebooks * num_linears,
+                                               num_res_centroids * vector_len,
                                                dtype=params_dtype)
             set_weight_attrs(res_centroids.weight, extra_weight_attrs)
             # layer.register_parameter("res_centroids", res_centroids)
@@ -460,8 +466,6 @@ class VPTQLinearMethod(LinearMethodBase):
                 res_centroids.weight,
                 {
                     # metadata indicates fixed size concatenated along dim 1
-                    "slice_dim":
-                    1,
                     "codebook_sizes": [
                         num_res_centroids * vector_len
                         for _ in output_partition_sizes
