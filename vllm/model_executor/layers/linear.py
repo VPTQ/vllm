@@ -532,12 +532,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                 # Special case for Marlin.
                 shard_size, shard_offset = adjust_marlin_shard(
                     param, shard_size, shard_offset)
-
-            custom_shard_sizes = getattr(param, "shard_sizes", None)
-            if custom_shard_sizes is not None:
-                shard_size = custom_shard_sizes[loaded_shard_id]
-                shard_offset = sum(custom_shard_sizes[:loaded_shard_id])
-
             if getattr(param, "is_input_size", False):
                 shard_size = self.input_size
                 shard_offset = self.input_size * loaded_shard_id
@@ -552,6 +546,8 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             param_data = param_data.narrow(output_dim, shard_offset,
                                            shard_size)
             start_idx = tp_rank * shard_size
+            if getattr(param, "is_input_size", False):
+                start_idx = 0
             # bitsandbytes loads the weights of the specific portion
             # no need to narrow here
             if not use_bitsandbytes_4bit:
@@ -915,12 +911,6 @@ class QKVParallelLinear(ColumnParallelLinear):
                 shard_size, shard_offset = adjust_marlin_shard(
                     param, shard_size, shard_offset)
 
-            custom_shard_sizes = getattr(param, "shard_sizes", None)
-            if custom_shard_sizes is not None:
-                _qkv_shard_id = ["q", "k", "v"].index(loaded_shard_id)
-                shard_size = custom_shard_sizes[_qkv_shard_id]
-                shard_offset = sum(custom_shard_sizes[:_qkv_shard_id])
-
             if getattr(param, "is_input_size", False):
                 shard_size = self.input_size
                 shard_offset = self.input_size * ["q", "k", "v"
@@ -950,7 +940,8 @@ class QKVParallelLinear(ColumnParallelLinear):
             else:
                 shard_id = tp_rank // self.num_kv_head_replicas
             start_idx = shard_id * shard_size
-
+            if getattr(param, "is_input_size", False):
+                start_idx = 0
             # bitsandbytes loads the weights of the specific portion
             # no need to narrow here
             if not use_bitsandbytes_4bit:
