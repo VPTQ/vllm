@@ -539,7 +539,7 @@ class VPTQLinearMethod(LinearMethodBase):
                                                      "weight_scale") else None
         weight_bias = layer.weight_bias if hasattr(layer,
                                                    "weight_bias") else None
-        perm = None  #layer.perm if hasattr(layer, "perm") else None
+        perm = layer.perm if hasattr(layer, "perm") else None
         indices = layer.indices
         output_partition_sizes = getattr(indices, "output_partition_sizes", [])
         centroids = layer.centroids.weight
