@@ -26,6 +26,42 @@ class MetaData:
         self.group_size = 0
         self.output_size = 0
 
+def pack_index(
+    indice: torch.Tensor,
+    index_bits: int,
+    res_indice: torch.Tensor = None,
+    res_bits: int = 0,
+    index_dtype: torch.dtype = torch.uint16,
+    as_dtype: torch.dtype = torch.int32,
+) -> torch.Tensor:
+    total_bits = index_bits + res_bits
+    assert total_bits <= 32, f"total index bits {total_bits} should be less than 32"
+    assert as_dtype in [torch.int32], "as_dtype should be int32"
+
+    # upcast the indice to uint64 to avoid overflow on signed bit
+    if res_indice is not None:
+        merged_indice = (res_indice.view(index_dtype).to(torch.uint64).view(torch.int64) << index_bits) | indice.view(
+            index_dtype
+        ).to(torch.uint64).view(torch.int64)
+    else:
+        merged_indice = indice.view(index_dtype).to(torch.uint64).view(torch.int64)
+
+    # merge the indice
+    wf = torch.arange(0, total_bits).to(merged_indice.device).view(1, 1, 1, -1)
+    out = torch.bitwise_right_shift(merged_indice.unsqueeze(-1), wf)
+    torch.bitwise_and(out, 1, out=out)
+    out = out.reshape(*merged_indice.shape[:-1], -1)
+    paded_bits = (32 - out.reshape(*merged_indice.shape[:-1], -1).shape[-1] % 32) % 32
+    out = torch.nn.functional.pad(
+        out,
+        (0, paded_bits),
+        value=0,
+        mode="constant",
+    ).reshape(*merged_indice.shape[:-1], -1, 32)
+    wf1 = torch.arange(0, 32, 1).to(merged_indice.device).view(1, 1, 1, -1)
+    out = torch.bitwise_left_shift(out, wf1)
+    out = out.sum(dim=-1).to(torch.uint32).view(as_dtype)
+    return out
 
 def unpack_index_tensor(
     pack_tensor: torch.Tensor,
@@ -438,7 +474,19 @@ class VPTQLinearMethod(LinearMethodBase):
             layer.register_parameter("weight_scale", weight_scale)
             layer.register_parameter("weight_bias", weight_bias)
 
+        index_bits = int(math.log2(num_centroids))
+        res_index_bits = int(
+            math.log2(num_res_centroids)) if enable_residual else 0
+
         if enable_perm:
+            pack_index(
+                indice=sub_mod.indices,
+                index_bits=index_bits,
+                res_indice=sub_mod.res_indices,
+                res_bits=int(math.log2(sub_mod.num_res_centroids))
+                if enable_residual is not None
+                else 0,
+            ).data
             extra_weight_attrs["output_dim"] = 0
             perm = Parameter(torch.empty(input_size_per_partition *
                                          num_linears,
@@ -450,9 +498,6 @@ class VPTQLinearMethod(LinearMethodBase):
         extra_weight_attrs.pop("is_input_size")
         extra_weight_attrs.pop("input_dim")
 
-        index_bits = int(math.log2(num_centroids))
-        res_index_bits = int(
-            math.log2(num_res_centroids)) if enable_residual else 0
         total_index_bits = index_bits + res_index_bits
         packed_groupsize = math.ceil(group_size * total_index_bits / 32)
 
